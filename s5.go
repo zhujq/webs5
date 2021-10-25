@@ -56,6 +56,8 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		}
 		port := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
 		log.Println(host)
+		log.Println(port)
+		log.Println(b[1])
 		server, err := net.Dial("tcp", net.JoinHostPort(host, port))
 		if server != nil {
 			defer server.Close()
@@ -63,7 +65,12 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		if err != nil {
 			return
 		}
-		connect.Write(connect_success)
+		if b[1] == 0x01 {
+			connect.Write(connect_success)
+		} else {
+			server.Write(b[:n])
+		}
+		//	connect.Write(connect_success)
 
 		go io.Copy(server, connect)
 		io.Copy(connect, server)
