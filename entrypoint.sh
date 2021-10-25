@@ -1,0 +1,2 @@
+nohup ./server &
+ ./s5
