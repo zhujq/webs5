@@ -11,9 +11,11 @@ import (
 )
 
 const proxyDomain = "zjqzjq2018-ssh.run.goorm.io"
-const port = "8888"
+const port = "9995"
 
 var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
+var serverSend net.Conn
+var serverListen net.Conn
 
 func randSeq(n int) string {
 	b := make([]rune, n)
@@ -39,13 +41,13 @@ func handleConnection(clientConn net.Conn) {
 
 	serverSend, err := tls.Dial("tcp", destSvr, conf)
 	if err != nil {
-		log.Println("Failed to connect to send proxy server!")
+		log.Println("Failed to connect to send proxy up server!")
 		return
 	}
 
-	serverListen, err := tls.Dial("tcp", destSvr, conf)
+	serverListen, err = tls.Dial("tcp", destSvr, conf)
 	if err != nil {
-		log.Println("Failed to connect to listen proxy server!")
+		log.Println("Failed to connect to listen proxy down server!")
 		return
 	}
 	log.Println("Succes dail to ssl server")
@@ -60,16 +62,16 @@ func handleConnection(clientConn net.Conn) {
 	wait := make(chan bool)
 
 	go func() {
-		log.Println("starting to post transmit http")
+		log.Println("starting to post up http")
 
-		_, err = serverSend.Write([]byte("GET /listen HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		_, err = serverSend.Write([]byte("GET /transmit HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
 		if err != nil {
 			log.Println(proxyDomain+":Error write to serversend", err)
 		}
 
-		buf := bufio.NewReader(serverListen)
+		buf := bufio.NewReader(serverSend)
 		success := false
-		log.Println(buf)
+		//	log.Println(buf)
 		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
 			log.Println(line)
 			if err != nil {
@@ -93,8 +95,8 @@ func handleConnection(clientConn net.Conn) {
 		//	fmt.Fprintf(serverSend, "----------SWAG------BOUNDARY----\r\n")
 
 		if success && b[0] == 0x05 {
-			log.Println("starting proxy...")
-			clientConn.Write(b[:n])
+			log.Println("entering up syn process...")
+			serverSend.Write(b[:n])
 			_, err = io.Copy(serverSend, clientConn)
 			if err != nil {
 				log.Println(proxyDomain+":Error copying client to server stream", err)
@@ -108,7 +110,7 @@ func handleConnection(clientConn net.Conn) {
 
 	go func() {
 		log.Println("starting to post listen http")
-		_, err = serverListen.Write([]byte("GET /transmit HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		_, err = serverListen.Write([]byte("GET /listen HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
 		//	fmt.Fprintf(serverListen, "GET /listen HTTP/1.1\r\n")
 		//	fmt.Fprintf(serverListen, "Host: "+proxyDomain+"\r\n")
 		//	fmt.Fprintf(serverListen, "Accept: */*\r\n")
@@ -120,7 +122,7 @@ func handleConnection(clientConn net.Conn) {
 		buf := bufio.NewReader(serverListen)
 
 		success := false
-		log.Println(buf)
+		//	log.Println(buf)
 		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
 			if err != nil {
 				log.Println("Failed to read following lines")
@@ -172,4 +174,5 @@ func main() {
 
 		go handleConnection(conn)
 	}
+
 }

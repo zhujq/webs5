@@ -2,98 +2,300 @@ package main
 
 import (
 	"bufio"
+	//	"fmt"
+	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log"
+	"math/rand"
 	"net"
+	"os"
+	"strings"
+	"time"
+	//	"sync"
+	//	"crypto/x509"
+	//	"io/ioutil"
+	//  "github.com/robfig/cron"
 )
 
-type Socks5ProxyHandler struct{}
+//const proxyDomain = "ub-proxy-service-zhujq.cloud.okteto.net"
+//const port = "9999"
 
-type Handler interface {
-	Handle(connect net.Conn)
+var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
+
+type Serv_port struct {
+	Port    string `json:"port"`
+	Webserv string `json:"address"`
 }
 
-func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
-	defer connect.Close()
-	if connect == nil {
-		return
+var webserv_port map[string]string
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	rand.Seed(time.Now().Unix())
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
 	}
+	return string(b)
+}
 
-	serverConn, err := net.Dial("tcp", "127.0.0.1:8888")
-	if err != nil {
-		return
-	}
-	defer serverConn.Close()
-	log.Println("succed dial to server-relay")
+func makedefaultcf() {
+	webserv_port["9999"] = "ub-proxy-service-zhujq.cloud.okteto.net"
+	webserv_port["9997"] = "zhujq-ssh.run.goorm.io"
+}
 
-	buf := bufio.NewReader(connect)
-	io.Copy(serverConn, buf)
-	go io.Copy(connect, serverConn)
-	//	b := make([]byte, 1024)
+func handleConnection(clientConn net.Conn, webServer string) {
+	defer clientConn.Close()
 
-	/*	n, err := connect.Read(b)
-		log.Println(b)
+	//	conf := &tls.Config{
+	//		InsecureSkipVerify: true,
+	//	}
+	/*	pool := x509.NewCertPool()
+		caCertPath := "cloud-okteto-net-chain.pem"
+
+		caCrt, err := ioutil.ReadFile(caCertPath)
 		if err != nil {
+			log.Println("ReadFile err:", err)
 			return
 		}
-		//	time.Sleep(3 * time.Second)
-		if b[0] == 0x05 {
-			log.Println("starting to proxy....")
+		pool.AppendCertsFromPEM(caCrt)
+		conf := &tls.Config{RootCAs: pool}
+	*/conf := &tls.Config{InsecureSkipVerify: true}
 
-		/*	c := make([]byte, 1024)
-			//	connect.Write([]byte{0x05, 0x00})
-			for {
-				n, err =serverConn.Write(b[:n])
+	proxyDomain := webServer
 
-				n, err = serverConn.Read(c)
-				log.Println(c)
-				if err != nil {
-					log.Println("error:", err)
-					return
-				}
-				if c[0] == 0x05 {
-					log.Println("get rsp from remote socket5 server")
-					break
-				}
-			}
+	var err error
+	var serverListen, serverSend net.Conn
+
+	if strings.Contains(proxyDomain, ":") == false { //地址信息不含端口号
+		proxyDomain += ":"
+	}
+	if strings.HasSuffix(proxyDomain, ":") { //默认443端口
+		proxyDomain += "443"
+	}
+
+	if strings.HasSuffix(proxyDomain, ":443") {
+		serverListen, err = tls.Dial("tcp", proxyDomain, conf)
+	} else {
+		serverListen, err = net.Dial("tcp", proxyDomain)
+	}
+
+	if err != nil {
+		log.Println(proxyDomain+":Failed to connect to listen proxy server!", err)
+		return
+	}
+
+	log.Println(proxyDomain + ":Success dial to Server_listen")
+
+	/*	err = serverListen.Handshake()
+		if err != nil {
+			log.Println(proxyDomain+":Failed to ssl handshake!",err)
+			return
+		}
 	*/
+	if strings.HasSuffix(proxyDomain, ":443") {
+		serverSend, err = tls.Dial("tcp", proxyDomain, conf)
+	} else {
+		serverSend, err = net.Dial("tcp", proxyDomain)
+	}
 
-	//	connect.Write(c[:n])
-	//	log.Println(c)
-	//	connect.Write([]byte{0x05, 0x00})
+	if err != nil {
+		log.Println(proxyDomain+":Failed to connect to send proxy server! ", err)
+		return
+	}
 
-	//	go io.Copy(connect, serverConn)
-	//	io.Copy(serverConn, connect)
+	log.Println(proxyDomain + ":Success dial to Server_send")
 
+	defer serverListen.Close()
+	defer serverSend.Close()
+
+	clientId := randSeq(20)
+
+	wait := make(chan bool)
+
+	go func() {
+		log.Println(proxyDomain + ":starting to get websocket upgrade")
+
+		_, err = serverListen.Write([]byte("GET /listen HTTP/1.1\r\n" + "Host: " + webServer + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		if err != nil {
+			log.Println(proxyDomain+":Error write to serverlisten", err)
+		}
+
+		buf := bufio.NewReader(serverListen)
+		success := false
+
+		/*	timer2 := time.NewTimer(time.Second*30)
+					go func() {        //等触发时的信号
+						for {
+							if success == true{
+						//		serverListen.Write([]byte{0x9})    // 0x9=ping (websocket keepalive frame)
+								serverListen.Write([]byte(" "))
+								log.Println(proxyDomain+":serverListen Keepalive...")
+							}
+							timer2 = time.NewTimer(time.Second*30)
+			        		<-timer2.C
+						}
+			    	}()
+		*/
+		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
+			log.Println(line)
+			if err != nil {
+				log.Println("error:", err)
+				log.Println(proxyDomain + ":Failed to read following lines")
+				return
+			}
+
+			if line == "HTTP/1.1 101 Switching Protocols\r\n" {
+				success = true
+			}
+
+			if success && line == "\r\n" {
+				break
+			}
+		}
+
+		if success {
+			_, err = io.Copy(clientConn, buf)
+
+			if err != nil {
+				log.Println("error:", err)
+				log.Println("Error copying server to client stream", err)
+			}
+		} else {
+			log.Println("Failed to bind listen connection!")
+		}
+		//	timer2.Stop()
+		wait <- true
+
+	}()
+
+	go func() {
+		log.Println(proxyDomain + ":starting to post websocket upgrade")
+
+		_, err = serverSend.Write([]byte("GET /transmit HTTP/1.1\r\n" + "Host: " + webServer + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		if err != nil {
+			log.Println(proxyDomain+":Error write to serversend", err)
+		}
+
+		buf := bufio.NewReader(serverSend)
+		success := false
+
+		/*	timer2 := time.NewTimer(time.Second*30)
+					go func() {        //等触发时的信号
+						for {
+							if success == true{
+						//		serverSend.Write([]byte{0x9})
+								serverListen.Write([]byte(" "))
+								log.Println(proxyDomain+":serverSend Keepalive...")
+							}
+							timer2 = time.NewTimer(time.Second*30)
+			        		<-timer2.C
+						}
+			    	}()
+		*/
+		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
+			log.Println(line)
+			if err != nil {
+				log.Println("error:", err)
+				log.Println(proxyDomain + ":Failed to read following lines")
+				return
+			}
+
+			if line == "HTTP/1.1 101 Switching Protocols\r\n" {
+				success = true
+			}
+
+			if success && line == "\r\n" {
+				break
+			}
+		}
+
+		b := make([]byte, 1024)
+		n, err := clientConn.Read(b)
+		log.Println(b[:n])
+
+		if success && b[0] == 0x05 {
+			serverSend.Write(b[:n])
+			_, err = io.Copy(serverSend, clientConn)
+			if err != nil {
+				log.Println(proxyDomain+":Error copying client to server stream", err)
+			}
+		} else {
+			log.Println(proxyDomain + ":Failed to bind send connection!")
+		}
+		//	timer2.Stop()
+		log.Println(proxyDomain + ":session is over")
+		wait <- true
+
+	}()
+
+	<-wait
 }
 
 func main() {
-	ln, err := net.Listen("tcp", ":9990")
-	if err != nil {
-		log.Println("Error listening!", err)
-		return
-	}
-	log.Println("This program is designed by zhujq for relay socket5,started listening 9990...")
+	log.Println("This program is designed by zhujq for ssh over http/https,starting...")
 
-	/*	if err != nil {
-			log.Println("Error connect to remote websocket server:", err)
-			return
+	webserv_port = make(map[string]string)
+
+	file, err := os.Open("./cf.json")
+	if err != nil { //无法读取配置文件时用默认配置
+		log.Println("error to read config file,use default config")
+		makedefaultcf()
+	} else {
+		buf := make([]byte, 1024)
+		len, _ := file.Read(buf)
+
+		if len == 0 {
+			log.Println("config file is empty,use default config")
+			makedefaultcf()
+		} else {
+			b := string(buf)
+			var Servlist []Serv_port
+			err = json.Unmarshal([]byte(b[:len]), &Servlist)
+			if err != nil {
+				log.Println("decode json file error,use default config")
+				makedefaultcf()
+			} else {
+				for _, a := range Servlist {
+					webserv_port[a.Port] = a.Webserv
+				}
+			}
 		}
-	*/
-	//	log.Println("Succed to dail to remote websocket server")
+	}
 
-	for true {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println("Error accepting connection", err)
-			continue
-		}
+	defer file.Close()
 
-		var handler Handler = new(Socks5ProxyHandler)
+	done := make(chan bool)
 
-		go handler.Handle(conn)
-		log.Println(conn)
+	for port := range webserv_port {
+
+		go func(bport string) {
+
+			ln, err := net.Listen("tcp", ":"+bport)
+			if err != nil {
+				log.Println("Error listening!", err)
+				return
+			}
+
+			log.Println("Listening at " + bport + " for ssh over http(s)://" + webserv_port[bport])
+
+			for true {
+				conn, err := ln.Accept()
+				if err != nil {
+					log.Println("Error accepting connection", err)
+					continue
+				}
+
+				go handleConnection(conn, webserv_port[bport])
+
+			}
+
+			done <- true
+
+		}(port)
 
 	}
+
+	<-done
 
 }

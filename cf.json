@@ -1,0 +1,10 @@
+[
+    {  "port":"9999","address":"ub-proxy-service-zhujq.cloud.okteto.net"},
+    {  "port":"9998","address":"web.zhujq.ml"},
+    {  "port":"9997","address":"zhujq-ssh.run.goorm.io"},
+    {  "port":"9996","address":"ubproxy.herokuapp.com"},
+    {  "port":"9995","address":"zjqzjq2018-ssh.run.goorm.io"},
+    {  "port":"9994","address":"ub-pnlse.run.goorm.io"},
+    {  "port":"9993","address":"de.zhujq.tk:8080"}
+    
+]
