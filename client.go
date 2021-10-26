@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"io"
 	"log"
 	"net"
@@ -22,19 +23,48 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 	if err != nil {
 		return
 	}
+	defer serverConn.Close()
 	log.Println("succed dial to server-relay")
-	b := make([]byte, 1024)
 
-	n, err := connect.Read(b)
-	if err != nil {
-		return
-	}
-
-	if b[0] == 0x05 {
-		serverConn.Write(b[:n])
-	}
+	buf := bufio.NewReader(connect)
+	io.Copy(serverConn, buf)
 	go io.Copy(connect, serverConn)
-	io.Copy(serverConn, connect)
+	//	b := make([]byte, 1024)
+
+	/*	n, err := connect.Read(b)
+		log.Println(b)
+		if err != nil {
+			return
+		}
+		//	time.Sleep(3 * time.Second)
+		if b[0] == 0x05 {
+			log.Println("starting to proxy....")
+
+		/*	c := make([]byte, 1024)
+			//	connect.Write([]byte{0x05, 0x00})
+			for {
+				n, err =serverConn.Write(b[:n])
+
+				n, err = serverConn.Read(c)
+				log.Println(c)
+				if err != nil {
+					log.Println("error:", err)
+					return
+				}
+				if c[0] == 0x05 {
+					log.Println("get rsp from remote socket5 server")
+					break
+				}
+			}
+	*/
+
+	//	connect.Write(c[:n])
+	//	log.Println(c)
+	//	connect.Write([]byte{0x05, 0x00})
+
+	//	go io.Copy(connect, serverConn)
+	//	io.Copy(serverConn, connect)
+
 }
 
 func main() {

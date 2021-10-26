@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -55,48 +54,80 @@ func handleConnection(clientConn net.Conn) {
 
 	clientId := randSeq(20)
 
+	b := make([]byte, 1024)
+	n, err := clientConn.Read(b)
+	log.Println(b[:n])
 	wait := make(chan bool)
 
 	go func() {
-		fmt.Fprintf(serverSend, "POST /transmit HTTP/1.1\r\n")
-		fmt.Fprintf(serverSend, "Host: "+proxyDomain+"\r\n")
-		fmt.Fprintf(serverSend, "Accept: */*\r\n")
-		fmt.Fprintf(serverSend, "Clientid: "+clientId+"\r\n")
-		fmt.Fprintf(serverSend, "Connection: keep-alive\r\n\r\n")
+		log.Println("starting to post transmit http")
 
+		_, err = serverSend.Write([]byte("GET /listen HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		if err != nil {
+			log.Println(proxyDomain+":Error write to serversend", err)
+		}
+
+		buf := bufio.NewReader(serverListen)
+		success := false
+		log.Println(buf)
+		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
+			log.Println(line)
+			if err != nil {
+				log.Println("error:", err)
+				log.Println(proxyDomain + ":Failed to read following lines")
+				return
+			}
+			if line == "HTTP/1.1 101 Switching Protocols\r\n" {
+				success = true
+				log.Println("succed get rsp")
+			}
+
+			if line == "\r\n" {
+				break
+			}
+		}
 		//	fmt.Fprintf(serverSend,
 		//		"Content-Type: multipart/form-data; boundary=----------SWAG------BOUNDARY----\r\n")
 		// fmt.Fprintf(serverSend, "Transfer-Encoding: chunked\r\n")
 		//	fmt.Fprintf(serverSend, "Content-Length: 12345789000\r\n\r\n")
 		//	fmt.Fprintf(serverSend, "----------SWAG------BOUNDARY----\r\n")
 
-		_, err = io.Copy(serverSend, clientConn)
-		if err != nil {
-			log.Println("Error copying client to server stream", err)
+		if success && b[0] == 0x05 {
+			log.Println("starting proxy...")
+			clientConn.Write(b[:n])
+			_, err = io.Copy(serverSend, clientConn)
+			if err != nil {
+				log.Println(proxyDomain+":Error copying client to server stream", err)
+			}
+		} else {
+			log.Println(proxyDomain + ":Failed to bind send connection!")
 		}
 
 		wait <- true
 	}()
 
 	go func() {
-		fmt.Fprintf(serverListen, "GET /listen HTTP/1.1\r\n")
-		fmt.Fprintf(serverListen, "Host: "+proxyDomain+"\r\n")
-		fmt.Fprintf(serverListen, "Accept: */*\r\n")
-		fmt.Fprintf(serverListen, "Clientid: "+clientId+"\r\n")
-		fmt.Fprintf(serverListen, "Connection: keep-alive\r\n")
-		fmt.Fprintf(serverListen, "\r\n")
+		log.Println("starting to post listen http")
+		_, err = serverListen.Write([]byte("GET /transmit HTTP/1.1\r\n" + "Host: " + proxyDomain + "\r\n" + "Accept: */*\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n" + "Clientid: " + clientId + "\r\n" + "Connection: keep-alive\r\n" + "Sec-WebSocket-Version: 13\r\n" + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" + "\r\n"))
+		//	fmt.Fprintf(serverListen, "GET /listen HTTP/1.1\r\n")
+		//	fmt.Fprintf(serverListen, "Host: "+proxyDomain+"\r\n")
+		//	fmt.Fprintf(serverListen, "Accept: */*\r\n")
+		//	fmt.Fprintf(serverListen, "Clientid: "+clientId+"\r\n")
+		//	fmt.Fprintf(serverListen, "Connection: keep-alive\r\n")
+		//	fmt.Fprintf(serverListen, "\r\n")
 
+		log.Println("succed get listen")
 		buf := bufio.NewReader(serverListen)
 
 		success := false
-
+		log.Println(buf)
 		for line, err := buf.ReadString('\n'); true; line, err = buf.ReadString('\n') {
 			if err != nil {
 				log.Println("Failed to read following lines")
 				return
 			}
 
-			if line == "HTTP/1.1 200 OK\r\n" {
+			if line == "HTTP/1.1 101 Switching Protocols\r\n" {
 				success = true
 				log.Println("succed get rsp")
 			}
@@ -107,6 +138,7 @@ func handleConnection(clientConn net.Conn) {
 		}
 
 		if success {
+			log.Println("entering downlink sync process...")
 			_, err = io.Copy(clientConn, buf)
 
 			if err != nil {
