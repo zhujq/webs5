@@ -8,9 +8,10 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strings"
 )
 
-const proxyDomain = "zjqzjq2018-ssh.run.goorm.io:443"
+const proxyDomain = "zjqzjq2018-ssh.run.goorm.io"
 const port = "8888"
 
 var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
@@ -28,18 +29,27 @@ func handleConnection(clientConn net.Conn) {
 
 	conf := &tls.Config{InsecureSkipVerify: true}
 
-	serverSend, err := tls.Dial("tcp", proxyDomain, conf)
+	destSvr := proxyDomain
+
+	if strings.Contains(destSvr, ":") == false { //地址信息不含端口号
+		destSvr += ":"
+	}
+	if strings.HasSuffix(destSvr, ":") { //默认443端口
+		destSvr += "443"
+	}
+
+	serverSend, err := tls.Dial("tcp", destSvr, conf)
 	if err != nil {
 		log.Println("Failed to connect to send proxy server!")
 		return
 	}
 
-	serverListen, err := tls.Dial("tcp", proxyDomain, conf)
+	serverListen, err := tls.Dial("tcp", destSvr, conf)
 	if err != nil {
 		log.Println("Failed to connect to listen proxy server!")
 		return
 	}
-
+	log.Println("Succes dail to ssl server")
 	defer serverListen.Close()
 	defer serverSend.Close()
 
@@ -51,13 +61,14 @@ func handleConnection(clientConn net.Conn) {
 		fmt.Fprintf(serverSend, "POST /transmit HTTP/1.1\r\n")
 		fmt.Fprintf(serverSend, "Host: "+proxyDomain+"\r\n")
 		fmt.Fprintf(serverSend, "Accept: */*\r\n")
-		fmt.Fprintf(serverSend, "Connection: keep-alive\r\n")
 		fmt.Fprintf(serverSend, "Clientid: "+clientId+"\r\n")
-		fmt.Fprintf(serverSend,
-			"Content-Type: multipart/form-data; boundary=----------SWAG------BOUNDARY----\r\n")
+		fmt.Fprintf(serverSend, "Connection: keep-alive\r\n\r\n")
+
+		//	fmt.Fprintf(serverSend,
+		//		"Content-Type: multipart/form-data; boundary=----------SWAG------BOUNDARY----\r\n")
 		// fmt.Fprintf(serverSend, "Transfer-Encoding: chunked\r\n")
-		fmt.Fprintf(serverSend, "Content-Length: 12345789000\r\n\r\n")
-		fmt.Fprintf(serverSend, "----------SWAG------BOUNDARY----\r\n")
+		//	fmt.Fprintf(serverSend, "Content-Length: 12345789000\r\n\r\n")
+		//	fmt.Fprintf(serverSend, "----------SWAG------BOUNDARY----\r\n")
 
 		_, err = io.Copy(serverSend, clientConn)
 		if err != nil {
@@ -87,6 +98,7 @@ func handleConnection(clientConn net.Conn) {
 
 			if line == "HTTP/1.1 200 OK\r\n" {
 				success = true
+				log.Println("succed get rsp")
 			}
 
 			if success && line == "\r\n" {

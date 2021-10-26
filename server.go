@@ -38,6 +38,7 @@ func bindServer(clientId string) {
 		if err != nil {
 			log.Println("Failed to connect to remote server :/", err)
 		}
+		log.Println("success to dial" + target)
 
 		defer serverConn.Close()
 
@@ -46,7 +47,7 @@ func bindServer(clientId string) {
 		go func() {
 			_, err := io.Copy(connectedClients[clientId].listener, serverConn)
 			if err != nil {
-				log.Println("Disconnect:", err)
+				log.Println("Down Conn Disconnect:", err)
 			}
 
 			wait <- true
@@ -55,7 +56,7 @@ func bindServer(clientId string) {
 		go func() {
 			_, err := io.Copy(serverConn, connectedClients[clientId].transmitter)
 			if err != nil {
-				log.Println("Disconnect:", err)
+				log.Println("Up Conn Disconnect:", err)
 			}
 
 			wait <- true
@@ -82,20 +83,24 @@ func handleConnection(clientConn net.Conn) {
 
 	line, err := reader.ReadString('\n')
 	if err != nil {
-		// log.Println("Failed to read first line", err)
+		log.Println("Failed to read first line", err)
 		return
 	}
 	if line == "GET /listen HTTP/1.1\r\n" {
 		// This is for LISTENING
+
 		resolvedId := ""
 		for line, err = reader.ReadString('\n'); true; line, err = reader.ReadString('\n') {
 			if err != nil {
-				// log.Println("Failed to read following lines", err)
+				log.Println("Failed to read following lines", err)
 				return
 			}
+			log.Println(line)
 
-			if len(line) > 10 && line[:10] == "Clientid: " {
+			if len(line) > 10 && (line[:10] == "Clientid: " || line[:10] == "clientid: ") { //2021-10-05增加，cloudflare 会把http头名改成小写
+				log.Println("Found clientid!")
 				resolvedId = line[10:30]
+				log.Println(resolvedId)
 			}
 
 			if line == "\r\n" {
@@ -104,11 +109,20 @@ func handleConnection(clientConn net.Conn) {
 		}
 
 		if len(resolvedId) > 1 {
-			fmt.Fprintf(clientConn, "HTTP/1.1 200 OK\r\n")
-			fmt.Fprintf(clientConn, "Content-Type: application/octet-stream\r\n")
-			fmt.Fprintf(clientConn, "Connection: keep-alive\r\n")
-			fmt.Fprintf(clientConn, "Content-Length: 12345789000\r\n\r\n")
+			log.Println("success to get resolvedid:" + resolvedId)
 
+			fmt.Fprintf(clientConn, "HTTP/1.1 200 Ok\r\nContent-Type: application/octet-stream\r\nConnection: keep-alive\r\n\r\n")
+			/*	fmt.Fprintf(clientConn, "Upgrade: websocket\r\n")
+					fmt.Fprintf(clientConn, "Connection: Upgrade\r\n")
+					fmt.Fprintf(clientConn, "Content-Type: application/octet-stream\r\n")
+					fmt.Fprintf(clientConn, "Connection: keep-alive\r\n")
+					fmt.Fprintf(clientConn, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n")
+				//	fmt.Fprintf(clientConn, "Content-Encoding: gzip\r\n")
+					fmt.Fprintf(clientConn, "Strict-Transport-Security: max-age=15724800; includeSubDomains\r\n")
+					fmt.Fprintf(clientConn, "Transfer-Encoding: chunked\r\n\r\n")
+
+				//	fmt.Fprintf(clientConn, "Content-Length: 999999\r\n\r\n")
+			*/
 			wait := make(chan bool)
 
 			if _, ok := connectedClients[resolvedId]; !ok {
@@ -123,34 +137,50 @@ func handleConnection(clientConn net.Conn) {
 
 			connectedClients[resolvedId] = currentClient
 
-			// log.Println("Attempting to bind listener")
+			log.Println("Attempting to bind listener")
 
 			go bindServer(resolvedId)
 
 			<-wait
 		} else {
-			// log.Println("Failed to find client id!")
+			log.Println("Failed to find client id!")
 		}
 
-	} else if line == "POST /transmit HTTP/1.1\r\n" {
+	} else if line == "GET /transmit HTTP/1.1\r\n" {
 		// This is for TRANSMITTING
+
 		resolvedId := ""
 		for line, err = reader.ReadString('\n'); true; line, err = reader.ReadString('\n') {
 			if err != nil {
-				// log.Println("Failed to read following lines")
+				log.Println("Failed to read following lines")
 				return
 			}
 
-			if len(line) > 10 && line[:10] == "Clientid: " {
+			log.Println(line)
+
+			if len(line) > 10 && (line[:10] == "Clientid: " || line[:10] == "clientid: ") { //2021-10-05增加，cloudflare 会把http头名改成小写
+				log.Println("Found clientid!")
 				resolvedId = line[10:30]
+				log.Println(resolvedId)
 			}
 
-			if line == "----------SWAG------BOUNDARY----\r\n" {
+			if line == "\r\n" {
 				break
 			}
 		}
 
 		if len(resolvedId) > 1 {
+			fmt.Fprintf(clientConn, "HTTP/1.1 200 Ok\r\nContent-Type: application/octet-stream\r\nConnection: keep-alive\r\n\r\n")
+			/*    fmt.Fprintf(clientConn, "Upgrade: websocket\r\n")
+			            fmt.Fprintf(clientConn, "Connection: Upgrade\r\n")
+						fmt.Fprintf(clientConn, "Content-Type: application/octet-stream\r\n")
+						fmt.Fprintf(clientConn, "Connection: keep-alive\r\n")
+						fmt.Fprintf(clientConn, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n")
+					//	fmt.Fprintf(clientConn, "Content-Encoding: gzip\r\n")
+						fmt.Fprintf(clientConn, "Strict-Transport-Security: max-age=15724800; includeSubDomains\r\n")
+						fmt.Fprintf(clientConn, "Transfer-Encoding: chunked\r\n\r\n")
+			*/
+			//	fmt.Fprintf(clientConn, "Content-Length: 999999\r\n\r\n")
 			wait := make(chan bool)
 
 			if _, ok := connectedClients[resolvedId]; !ok {
@@ -165,13 +195,13 @@ func handleConnection(clientConn net.Conn) {
 
 			connectedClients[resolvedId] = currentClient
 
-			// log.Println("Attempting to bind transmission")
+			log.Println("Attempting to bind transmission")
 
 			go bindServer(resolvedId)
 
 			<-wait
 		} else {
-			// log.Println("Failed to find client id!")
+			log.Println("Failed to find client id!")
 		}
 
 	} else {
@@ -189,7 +219,8 @@ func main() {
 		log.Println("Error listening!", err)
 		return
 	}
-
+	//	log.Println(os.Getenv("QOVERY_BRANCH_NAME"))
+	//	log.Println(os.Getenv("QOVERY_APPLICATION_WEBPROXY_HOSTNAME"))
 	for true {
 		conn, err := ln.Accept()
 		if err != nil {

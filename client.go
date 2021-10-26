@@ -18,11 +18,11 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		return
 	}
 
-	serverConn, err := net.Dial("tcp", "3.34.125.67:59273")
+	serverConn, err := net.Dial("tcp", "127.0.0.1:8888")
 	if err != nil {
 		return
 	}
-
+	log.Println("succed dial to server-relay")
 	b := make([]byte, 1024)
 
 	n, err := connect.Read(b)
