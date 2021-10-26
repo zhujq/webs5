@@ -18,13 +18,18 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		return
 	}
 
+	serverConn, err := net.Dial("tcp", "3.34.125.67:59273")
+	if err != nil {
+		return
+	}
+
 	b := make([]byte, 1024)
 
 	n, err := connect.Read(b)
 	if err != nil {
 		return
 	}
-	serverConn, err := net.Dial("tcp", "127.0.0.1:9995")
+
 	if b[0] == 0x05 {
 		serverConn.Write(b[:n])
 	}
@@ -38,14 +43,14 @@ func main() {
 		log.Println("Error listening!", err)
 		return
 	}
-	log.Println("This program is designed by zhujq for relay socket5,started listening 9990 and connecting to remote websocket server...")
+	log.Println("This program is designed by zhujq for relay socket5,started listening 9990...")
 
-	if err != nil {
-		log.Println("Error connect to remote websocket server:", err)
-		return
-	}
-
-	log.Println("Succed to dail to remote websocket server")
+	/*	if err != nil {
+			log.Println("Error connect to remote websocket server:", err)
+			return
+		}
+	*/
+	//	log.Println("Succed to dail to remote websocket server")
 
 	for true {
 		conn, err := ln.Accept()
