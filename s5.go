@@ -31,8 +31,9 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		return
 	}
 
-	var b [10240]byte
-	_, err := connect.Read(b)
+	b := [1024]byte{0x0}
+
+	_, err := connect.Read(b[:])
 	if err != nil {
 		return
 	}
@@ -44,13 +45,13 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 
 	connect.Write(no_auth)
 
-	_, err = connect.Read(b)
+	n, err := connect.Read(b[:])
 	var host string
 	switch b[3] {
 	case 0x01: //IP V4
 		host = net.IPv4(b[4], b[5], b[6], b[7]).String()
 	case 0x03: //domain
-		host = string(b[5 : len(b)-2]) //b[4] length of domain
+		host = string(b[5 : n-2]) //b[4] length of domain
 	case 0x04: //IP V6
 		host = net.IP{b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]}.String()
 	default:
@@ -58,7 +59,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 	}
 	//	port := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
 	var port uint16
-	binary.Read(bytes.NewReader(b[len(b)-2:]), binary.BigEndian, &port)
+	binary.Read(bytes.NewReader(b[(n-2):]), binary.BigEndian, &port)
 
 	log.Println(host + ":")
 	log.Println(port)
