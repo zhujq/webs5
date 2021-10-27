@@ -10,12 +10,10 @@ import (
 	"strings"
 )
 
-const proxyDomain = "zjqzjq2018-ssh.run.goorm.io"
-const port = "9995"
+const proxyDomain = "zjqzjq2018-ray.run.goorm.io"
+const port = "9990"
 
 var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
-var serverSend net.Conn
-var serverListen net.Conn
 
 func randSeq(n int) string {
 	b := make([]rune, n)
@@ -45,12 +43,12 @@ func handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	serverListen, err = tls.Dial("tcp", destSvr, conf)
+	serverListen, err := tls.Dial("tcp", destSvr, conf)
 	if err != nil {
 		log.Println("Failed to connect to listen proxy down server!")
 		return
 	}
-	log.Println("Succes dail to ssl server")
+	log.Println("Succes dail to dual-way ssl server")
 	defer serverListen.Close()
 	defer serverSend.Close()
 
@@ -171,7 +169,6 @@ func main() {
 			log.Println("Error accepting connection", err)
 			continue
 		}
-
 		go handleConnection(conn)
 	}
 

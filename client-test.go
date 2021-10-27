@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-const proxyDomain = "https://zjqzjq2018-ssh.run.goorm.io"
+const proxyDomain = "token.zhujq.ga:9999"
 const port = "9990"
 
 func handleConnection(clientConn net.Conn) {
@@ -18,6 +18,10 @@ func handleConnection(clientConn net.Conn) {
 
 	log.Println(b[:n])
 
+	serverConn, err := net.Dial("tcp", proxyDomain)
+	serverConn.Write(b[:n])
+
+	clientConn.Write()
 	buf := bytes.NewReader(b)
 	//	log.Println(buf)
 	var webclient http.Client

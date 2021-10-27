@@ -1,21 +1,17 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net"
-
-	"io"
 	"strconv"
-	//	"./proxy"
 )
 
 var (
 	no_auth = []byte{0x05, 0x00}
 	//	with_auth = []byte{0x05, 0x02}
-
 	//	auth_success = []byte{0x05, 0x00}
 	//	auth_failed  = []byte{0x05, 0x01}
-
 	connect_success = []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
 
@@ -31,8 +27,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		return
 	}
 
-	b := make([]byte, 1024)
-
+	b := make([]byte, 2048)
 	n, err := connect.Read(b)
 	if err != nil {
 		return
@@ -54,15 +49,19 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		default:
 			return
 		}
-		port := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
-		log.Println(host)
-		log.Println(port)
-		log.Println(b[1])
+		port, err := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
+		if err != nil {
+			log.Println("error:", err)
+			return
+		}
+		log.Println(host + ":" + port)
+		//	log.Println(b[1])
 		server, err := net.Dial("tcp", net.JoinHostPort(host, port))
 		if server != nil {
 			defer server.Close()
 		}
 		if err != nil {
+			log.Println("error:", err)
 			return
 		}
 		if b[1] == 0x01 {
@@ -71,9 +70,8 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 			server.Write(b[:n])
 		}
 		//	connect.Write(connect_success)
-
-		go io.Copy(server, connect)
-		io.Copy(connect, server)
+		io.Copy(server, connect)
+		go io.Copy(connect, server)
 	}
 }
 
@@ -87,13 +85,11 @@ func main() {
 
 	for {
 		client, err := socket.Accept()
-
 		if err != nil {
 			return
 		}
 
 		var handler Handler = new(Socks5ProxyHandler)
-
 		go handler.Handle(client)
 
 		log.Println(client, " request handling...")
