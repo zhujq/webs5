@@ -12,6 +12,7 @@ var (
 	//	with_auth = []byte{0x05, 0x02}
 	//	auth_success = []byte{0x05, 0x00}
 	//	auth_failed  = []byte{0x05, 0x01}
+	gen_failed      = []byte{0x05, 0x01, 0x00}
 	connect_success = []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
 
@@ -61,14 +62,16 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 			log.Println("error:", err)
 			return
 		}
-		if b[1] == 0x01 {
+		if b[1] == 0x01 { //只支持connect
 			connect.Write(connect_success)
+			io.Copy(server, connect)
+			go io.Copy(connect, server)
+
 		} else {
-			server.Write(b[:n])
+			server.Write(gen_failed)
 		}
-		//	connect.Write(connect_success)
-		io.Copy(server, connect)
-		go io.Copy(connect, server)
+		return
+
 	}
 }
 
