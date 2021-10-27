@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"io"
 	"log"
 	"net"
@@ -12,7 +14,7 @@ var (
 	//	with_auth = []byte{0x05, 0x02}
 	//	auth_success = []byte{0x05, 0x00}
 	//	auth_failed  = []byte{0x05, 0x01}
-	gen_failed      = []byte{0x05, 0x01, 0x00}
+	gen_failed      = []byte{0x05, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	connect_success = []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
 
@@ -22,57 +24,81 @@ type Handler interface {
 	Handle(connect net.Conn)
 }
 
+func readLen(con net.Conn, len int) (buf []byte) {
+	buf = make([]byte, len)
+
+	n, _ := con.Read(buf)
+
+	return buf[:n]
+}
+
 func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 	defer connect.Close()
 	if connect == nil {
 		return
 	}
 
-	b := make([]byte, 2048)
-	n, err := connect.Read(b)
+	var b []byte
+
+	b = readLen(connect, 1+1+255)
+	if b[0] != 0x05 {
+		log.Println("only support socket5")
+		_ = connect.Close()
+		return
+	}
+
+	connect.Write(no_auth)
+
+	b = readLen(connect, 4)
+
+	cmd := b[1]
+	switch cmd {
+	case 0x01: //tcp
+	case 0x02: //bind
+		log.Println("不支持BIND")
+		connect.Write(gen_failed)
+		connect.Close()
+		return
+	case 0x03: //udp
+		log.Println("不支持UDP")
+		connect.Write(gen_failed)
+		connect.Close()
+		return
+	}
+
+	atyp := b[3]
+	var host string
+	var port uint16
+	b = readLen(connect, 1024)
+	switch atyp {
+	case 0x01: //ipv4地址
+		host = net.IP(b[:4]).String()
+	case 0x03: //域名
+		host = string(b[1 : len(b)-2])
+	case 0x04: //ipv6地址
+		host = net.IP(b[:16]).String()
+	}
+	_ = binary.Read(bytes.NewReader(b[len(b)-2:]), binary.BigEndian, &port)
+
+	log.Println(host + ":" + string(port))
+	//	log.Println(b[1])
+	server, err := net.Dial("tcp", host+":"+strconv.Itoa(int(port)))
+	if server != nil {
+		defer server.Close()
+	}
 	if err != nil {
+		log.Println("error:", err)
 		return
 	}
 
-	if b[0] == 0x05 {
+	_, _ = connect.Write([]byte{0x05, 0x00, 0x00, atyp})
+	//把地址写回去
+	_, _ = connect.Write(b)
+	go io.Copy(server, connect)
+	io.Copy(connect, server)
 
-		connect.Write(no_auth)
+	return
 
-		n, err = connect.Read(b)
-		var host string
-		switch b[3] {
-		case 0x01: //IP V4
-			host = net.IPv4(b[4], b[5], b[6], b[7]).String()
-		case 0x03: //domain
-			host = string(b[5 : n-2]) //b[4] length of domain
-		case 0x04: //IP V6
-			host = net.IP{b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]}.String()
-		default:
-			return
-		}
-		port := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
-
-		log.Println(host + ":" + port)
-		//	log.Println(b[1])
-		server, err := net.Dial("tcp", net.JoinHostPort(host, port))
-		if server != nil {
-			defer server.Close()
-		}
-		if err != nil {
-			log.Println("error:", err)
-			return
-		}
-		if b[1] == 0x01 { //只支持connect
-			connect.Write(connect_success)
-			go io.Copy(server, connect)
-			io.Copy(connect, server)
-
-		} else {
-			server.Write(gen_failed)
-		}
-		return
-
-	}
 }
 
 func main() {

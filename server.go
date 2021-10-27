@@ -25,6 +25,13 @@ var connectedClients map[string]client = make(map[string]client)
 
 func bindServer(clientId string) {
 	if connectedClients[clientId].listenerConnected && connectedClients[clientId].transmitterConnected {
+		serverConn, err := net.Dial("tcp", target)
+		defer serverConn.Close()
+		if err != nil {
+			log.Println("Failed to connect to remote server:", err)
+			return
+		}
+		log.Println("Success dial to： " + target)
 		log.Println("Two-way connection to client established!")
 		log.Println("Client <=|F|=> Proxy <-...-> VPN")
 
@@ -33,14 +40,6 @@ func bindServer(clientId string) {
 			connectedClients[clientId].transmitChannel <- true
 			delete(connectedClients, clientId)
 		}()
-
-		serverConn, err := net.Dial("tcp", target)
-		if err != nil {
-			log.Println("Failed to connect to remote server:", err)
-		}
-		log.Println("success dial to： " + target)
-
-		defer serverConn.Close()
 
 		wait := make(chan bool)
 
