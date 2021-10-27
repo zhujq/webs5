@@ -49,11 +49,8 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		default:
 			return
 		}
-		port, err := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
-		if err != nil {
-			log.Println("error:", err)
-			return
-		}
+		port := strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
+
 		log.Println(host + ":" + port)
 		//	log.Println(b[1])
 		server, err := net.Dial("tcp", net.JoinHostPort(host, port))
