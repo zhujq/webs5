@@ -64,8 +64,8 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		}
 		if b[1] == 0x01 { //只支持connect
 			connect.Write(connect_success)
-			io.Copy(server, connect)
-			go io.Copy(connect, server)
+			go io.Copy(server, connect)
+			io.Copy(connect, server)
 
 		} else {
 			server.Write(gen_failed)
