@@ -28,6 +28,7 @@ func handleConnection(clientConn net.Conn) {
 	}
 	defer rsp.Body.Close()
 	body, err := ioutil.ReadAll(rsp.Body)
+	log.Println(body)
 	clientConn.Write(body)
 
 }

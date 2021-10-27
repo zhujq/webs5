@@ -14,6 +14,7 @@ const port = "80"
 const target = "127.0.0.1:9979"
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("starting process....")
 	s, _ := ioutil.ReadAll(r.Body)
 	if string(s) == "" {
 		w.WriteHeader(http.StatusNotFound)
@@ -48,5 +49,5 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	http.HandleFunc("/", IndexHandler)
-	http.ListenAndServe("127.0.0.0:9990", nil)
+	http.ListenAndServe("127.0.0.1:80", nil)
 }
