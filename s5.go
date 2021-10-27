@@ -40,7 +40,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 
 	var b []byte
 
-	b = readLen(connect, 1+1+255)
+	b = readLen(connect, 1)
 	if b[0] != 0x05 {
 		log.Println("only support socket5")
 		_ = connect.Close()
@@ -72,11 +72,11 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 	b = readLen(connect, 1024)
 	switch atyp {
 	case 0x01: //ipv4地址
-		host = net.IP(b[:4]).String()
+		host = net.IP(b[:3]).String()
 	case 0x03: //域名
 		host = string(b[1 : len(b)-2])
 	case 0x04: //ipv6地址
-		host = net.IP(b[:16]).String()
+		host = net.IP(b[:15]).String()
 	}
 	_ = binary.Read(bytes.NewReader(b[len(b)-2:]), binary.BigEndian, &port)
 
