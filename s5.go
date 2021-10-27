@@ -31,7 +31,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		return
 	}
 
-	var b []byte
+	var b [10240]byte
 	_, err := connect.Read(b)
 	if err != nil {
 		return
