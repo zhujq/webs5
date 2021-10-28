@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -57,29 +58,33 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(clientid + ":send req from webs to s5,len is " + strconv.Itoa(n))
 
 	b := [65536]byte{0x0} //64k的缓冲区
-	n, err = conns[clientid].Read(b[:])
-	if err != nil {
-		log.Println(clientid+":Geted rsp from s5 to webs conn error:", err)
-		delete(conns, clientid)
-		w.WriteHeader(http.StatusNotFound)
-		return
-
+	for {
+		n, err = conns[clientid].Read(b[:])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println(clientid+":Geted rsp from s5 to webs conn error:", err)
+			delete(conns, clientid)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		//	buf := bufio.NewReader(serverConn)
+		//	log.Println(b[:n])
+		log.Println(clientid + ":Geted rsp from s5 to webs,len is: " + strconv.Itoa(n))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		//	w.Header().Set("Content-Length", "999999")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		w.Header().Set("Connection", "keep-alive")
+		//	w.WriteHeader(http.StatusOK)
+		n, err = w.Write(b[:n])
+		if err != nil {
+			log.Println("Write to webs->webc conn error:", err)
+			delete(conns, clientid)
+			return
+		}
+		log.Println(clientid + ":send rsp from webs to webc,len is: " + strconv.Itoa(n))
 	}
-	//	buf := bufio.NewReader(serverConn)
-	//	log.Println(b[:n])
-	log.Println(clientid + ":Geted rsp from s5 to webs,len is: " + strconv.Itoa(n))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	//	w.Header().Set("Content-Length", "999999")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Connection", "keep-alive")
-	//	w.WriteHeader(http.StatusOK)
-	n, err = w.Write(b[:n])
-	if err != nil {
-		log.Println("Write to webs->webc conn error:", err)
-		delete(conns, clientid)
-		return
-	}
-	log.Println(clientid + ":send rsp from webs to webc,len is: " + strconv.Itoa(n))
 
 }
 
