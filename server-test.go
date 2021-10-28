@@ -1,53 +1,91 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"strconv"
+	"sync"
 )
 
-const port = "80"
+const port = ":8080"
 const target = "127.0.0.1:9979"
+
+var conns map[string]net.Conn = make(map[string]net.Conn)
+var lock sync.Mutex
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("starting process....")
 	s, _ := ioutil.ReadAll(r.Body)
+	clientid := r.Header.Get("Clientid")
+	log.Println(clientid)
+
+	if clientid == "" {
+		log.Println("Not Get cliendId")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	if string(s) == "" {
+		log.Println("Get empty msg,exit....")
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, string(""))
 		return
 	}
-
-	serverConn, err := net.Dial("tcp", target)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, string(""))
-		return
-	}
-	log.Println(s)
-	serverConn.Write([]byte(s))
-
-	buf := bufio.NewReader(serverConn)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", "999999")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	w.WriteHeader(http.StatusOK)
-	var buff []byte
-	for {
-		_, err := buf.Read(buff[:])
-		if err == io.EOF {
-			break
+	_, exists := conns[clientid]
+	if exists == false {
+		//	delete(conns, clientid)
+		serverConn, err := net.Dial("tcp", target)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		lock.Lock()
+		conns[clientid] = serverConn
+		lock.Unlock()
 	}
-	w.Write(buff)
-	return
+
+	log.Println(clientid + ":Get req from webc to webs,len is " + strconv.Itoa(len(s)))
+
+	n, err := conns[clientid].Write(s)
+	if err != nil {
+		log.Println(clientid+":Write to server conn error:", err)
+		w.WriteHeader(http.StatusNotFound)
+		delete(conns, clientid)
+		//	w.Write("")
+		return
+	}
+	log.Println(clientid + ":send req from webs to s5,len is " + strconv.Itoa(n))
+
+	b := [65536]byte{0x0} //64k的缓冲区
+	n, err = conns[clientid].Read(b[:])
+	if err != nil {
+		log.Println(clientid+":Geted rsp from s5 to webs conn error:", err)
+		delete(conns, clientid)
+		w.WriteHeader(http.StatusNotFound)
+		return
+
+	}
+	//	buf := bufio.NewReader(serverConn)
+	//	log.Println(b[:n])
+	log.Println(clientid + ":Geted rsp from s5 to webs,len is: " + strconv.Itoa(n))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	//	w.Header().Set("Content-Length", "999999")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Connection", "keep-alive")
+	//	w.WriteHeader(http.StatusOK)
+	n, err = w.Write(b[:n])
+	if err != nil {
+		log.Println("Write to webs->webc conn error:", err)
+		delete(conns, clientid)
+		return
+	}
+	log.Println(clientid + ":send rsp from webs to webc,len is: " + strconv.Itoa(n))
+
 }
 
 func main() {
+	log.Println("Listenging on" + port)
 	http.HandleFunc("/", IndexHandler)
-	http.ListenAndServe("127.0.0.1:80", nil)
+	http.ListenAndServe(port, nil)
+
 }

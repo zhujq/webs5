@@ -2,43 +2,91 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
+	"strconv"
 )
 
-const proxyDomain = "token.zhujq.ga:9999"
+const proxyDomain = "http://127.0.0.1:8080"
 const port = "9990"
+
+var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
 
 func handleConnection(clientConn net.Conn) {
 
-	b := make([]byte, 1024)
-	n, err := clientConn.Read(b)
+	defer clientConn.Close()
 
-	log.Println(b[:n])
+	b := [1024]byte{0x0}
+	clientId := randSeq(20)
 
-	serverConn, err := net.Dial("tcp", proxyDomain)
-	serverConn.Write(b[:n])
+	for {
+		n, err := clientConn.Read(b[:])
 
-	clientConn.Write()
-	buf := bytes.NewReader(b)
-	//	log.Println(buf)
-	var webclient http.Client
-	rsp, err := webclient.Post(proxyDomain, "application/octet-stream", buf)
-	if err != nil {
-		log.Println("Error post:", err)
-		return
+		if err == io.EOF {
+			log.Println(clientId+":clientConn has closed:", err)
+			return
+		}
+		if err != nil {
+			log.Println(clientId+":Read clientConn error:", err)
+			return
+		}
+		if n == 0 {
+			continue
+		}
+
+		log.Println(clientId + ":get req from s5client to webc,len is: " + strconv.Itoa(n) + " Content:")
+		log.Println(b[:n])
+		var webclient http.Client
+		req, err := http.NewRequest("GET", proxyDomain, bytes.NewReader(b[:n]))
+		if err != nil {
+			log.Println("Error post:", err)
+			break
+		}
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Content-Type", "multipart/form-data")
+		req.Header.Add("Clientid", clientId)
+		rsp, err := webclient.Do(req)
+		if err != nil {
+			log.Println(clientId+":Error post:", err)
+			break
+		}
+		log.Println(clientId + ":Send req from webc to webs,len is: " + strconv.Itoa(n))
+		defer rsp.Body.Close()
+		/*	if rsp.StatusCode != http.StatusOK {
+				log.Println("Get post err result:" + rsp.Status)
+				break
+			}
+		*/
+		body, err := ioutil.ReadAll(rsp.Body)
+		log.Println(clientId + ":Geted rsp from webs to webc,len is " + strconv.Itoa(len(body)))
+		//	log.Println(body)
+		n, err = clientConn.Write(body)
+		if err != nil {
+			log.Println(clientId+":Write from webc to s5client error:", err)
+			break
+		}
+		log.Println(clientId + ":Send from webc to s5client,len is " + strconv.Itoa(n) + " Content:")
+		log.Println(body)
 	}
-	defer rsp.Body.Close()
-	body, err := ioutil.ReadAll(rsp.Body)
-	log.Println(body)
-	clientConn.Write(body)
+
+	return
 
 }
 
 func main() {
-	log.Println("Listening...")
+	log.Println("Listening on " + port + "....")
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Println("Error listening!", err)
@@ -51,7 +99,6 @@ func main() {
 			log.Println("Error accepting connection", err)
 			continue
 		}
-
 		go handleConnection(conn)
 	}
 

@@ -42,7 +42,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		connect.Close()
 		return
 	}
-
+	log.Println("get socket5 conn reqest,sending rsp....")
 	connect.Write(no_auth)
 
 	n, err := connect.Read(b[:])

@@ -212,14 +212,12 @@ func handleConnection(clientConn net.Conn) {
 }
 
 func main() {
-	log.Println("Listening...")
+	log.Println("Listening on " + port + "....")
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Println("Error listening!", err)
 		return
 	}
-	//	log.Println(os.Getenv("QOVERY_BRANCH_NAME"))
-	//	log.Println(os.Getenv("QOVERY_APPLICATION_WEBPROXY_HOSTNAME"))
 	for true {
 		conn, err := ln.Accept()
 		if err != nil {

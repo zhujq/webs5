@@ -156,7 +156,7 @@ func handleConnection(clientConn net.Conn) {
 }
 
 func main() {
-	log.Println("Listening...")
+	log.Println("Listening on " + port + "....")
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Println("Error listening!", err)
