@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -58,19 +57,15 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(clientid + ":send req from webs to s5,len is " + strconv.Itoa(n))
 
 	b := [65536]byte{0x0} //64k的缓冲区
-	n = 0
-	for {
-		i, err := conns[clientid].Read(b[n:])
-		n += i
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println(clientid+":Geted rsp from s5 to webs conn error:", err)
-			delete(conns, clientid)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
+
+	n, err = conns[clientid].Read(b[:]) //这里无法进行for循环，否则导致程序一直在for循环中，因为reader的流式没有io.EOF，
+	//所以socket5 over http/ssl 无法实现，不能用中间无连接的http协议来承载有连接的socket5协议，最多实现小包的传递
+	if err != nil {
+		log.Println(clientid+":Geted rsp from s5 to webs conn error:", err)
+		delete(conns, clientid)
+		w.WriteHeader(http.StatusNotFound)
+		return
+
 	}
 	//	buf := bufio.NewReader(serverConn)
 	//	log.Println(b[:n])
