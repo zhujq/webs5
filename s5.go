@@ -70,7 +70,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 	}
 	if err != nil {
 		log.Println("error:", err)
-		server.Write(gen_failed)
+		connect.Write(gen_failed)
 		return
 	}
 	if b[1] == 0x01 { //只支持connect
@@ -79,7 +79,7 @@ func (socks5 *Socks5ProxyHandler) Handle(connect net.Conn) {
 		io.Copy(connect, server)
 
 	} else {
-		server.Write(gen_failed)
+		connect.Write(gen_failed)
 	}
 	return
 }

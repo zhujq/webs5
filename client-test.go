@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"io/ioutil"
@@ -27,12 +28,13 @@ func randSeq(n int) string {
 func handleConnection(clientConn net.Conn) {
 
 	defer clientConn.Close()
-
+	r := bufio.NewReader(clientConn)
 	b := [1024]byte{0x0}
 	clientId := randSeq(20)
 
 	for {
-		n, err := clientConn.Read(b[:])
+
+		n, err := r.Read(b[:])
 
 		if err == io.EOF {
 			log.Println(clientId+":clientConn has closed:", err)
@@ -47,7 +49,8 @@ func handleConnection(clientConn net.Conn) {
 		//	}
 
 		log.Println(clientId + ":get req from s5client to webc,len is: " + strconv.Itoa(n))
-		log.Println(b[:n])
+		//	log.Println(b[:n])
+
 		var webclient http.Client
 		req, err := http.NewRequest("GET", "https://"+proxyDomain, bytes.NewReader(b[:n]))
 		if err != nil {
@@ -79,7 +82,7 @@ func handleConnection(clientConn net.Conn) {
 			break
 		}
 		log.Println(clientId + ":Send from webc to s5client,len is " + strconv.Itoa(n))
-		log.Println(body)
+		//	log.Println(body)
 
 		continue
 	}
