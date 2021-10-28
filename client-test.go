@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-const proxyDomain = "http://127.0.0.1:8080"
+const proxyDomain = "zjqzjq2018-ray.run.goorm.io"
 const port = "9990"
 
 var letters = []rune("abcdefghijklmnopqrstuvwyz1234567890")
@@ -42,19 +42,20 @@ func handleConnection(clientConn net.Conn) {
 			log.Println(clientId+":Read clientConn error:", err)
 			return
 		}
-		if n == 0 {
-			continue
-		}
+		//	if n == 0 {
+		//		continue
+		//	}
 
-		log.Println(clientId + ":get req from s5client to webc,len is: " + strconv.Itoa(n) + " Content:")
+		log.Println(clientId + ":get req from s5client to webc,len is: " + strconv.Itoa(n))
 		log.Println(b[:n])
 		var webclient http.Client
-		req, err := http.NewRequest("GET", proxyDomain, bytes.NewReader(b[:n]))
+		req, err := http.NewRequest("GET", "https://"+proxyDomain, bytes.NewReader(b[:n]))
 		if err != nil {
 			log.Println("Error post:", err)
 			break
 		}
 		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Host", proxyDomain)
 		req.Header.Set("Content-Type", "multipart/form-data")
 		req.Header.Add("Clientid", clientId)
 		rsp, err := webclient.Do(req)
@@ -77,8 +78,10 @@ func handleConnection(clientConn net.Conn) {
 			log.Println(clientId+":Write from webc to s5client error:", err)
 			break
 		}
-		log.Println(clientId + ":Send from webc to s5client,len is " + strconv.Itoa(n) + " Content:")
+		log.Println(clientId + ":Send from webc to s5client,len is " + strconv.Itoa(n))
 		log.Println(body)
+
+		continue
 	}
 
 	return
